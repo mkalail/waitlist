@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 
+  Shine effect animation
+  - Duration: 4s
+  - Timing: ease-in-out
+  - Iteration: infinite
+*/
+@keyframes shine {
+  0% {
+    left: -100%;
+    transition-property: left;
+  }
+  20%,
+  100% {
+    left: 100%;
+    transition-property: left;
+  }
+}
+
+.shine-effect {
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: shine 4s infinite;
+}
+
+/* 
+  Glow animation configuration
+  Adjust these values to modify the glow effect:
+  - Duration: 4s
+  - Color: rgba(255, 248, 184, X) where X is opacity
+  - Size: 0 0 Ypx where Y is the glow radius
+*/
+@keyframes glow-infinite {
+  0%,
+  100% {
+    opacity: 0.8;
+    box-shadow: 0 0 15px rgba(255, 248, 184, 0.1), inset 0 0 15px rgba(255, 248, 184, 0.1);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 25px rgba(255, 248, 184, 0.2), inset 0 0 25px rgba(255, 248, 184, 0.2);
+  }
+}
+
+.animate-glow-infinite {
+  animation: glow-infinite 4s ease-in-out infinite;
+}
+
