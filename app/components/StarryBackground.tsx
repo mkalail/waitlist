@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useRef, useState } from "react"
+import React, { useEffect, useRef } from "react"
 
 interface Particle {
   x: number
@@ -14,12 +14,21 @@ interface Particle {
 }
 
 interface MouseState {
+  x: number
+  y: number
+  lastX: number
+  lastY: number
   moveX: number
   moveY: number
   lastMoved: number
 }
 
-// Particle configuration (Same for both desktop and mobile)
+// Detect if the user is on a mobile device
+const isMobileDevice = () => {
+  return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+}
+
+// Particle configuration
 const PARTICLE_CONFIG = {
   COUNT: 200,
   MIN_SIZE: 0.3,
@@ -27,27 +36,29 @@ const PARTICLE_CONFIG = {
   COLOR: "255, 248, 184",
   MIN_OPACITY: 0.4,
   MAX_OPACITY: 0.7,
-  MOVEMENT_SPEED: 0.008, // Speed multiplier
-  MOUSE_INFLUENCE: 0.008, // Only applied on desktop
-  RETURN_SPEED: 0.002, // Slow return to original position
-  MOVEMENT_DECAY: 0.98, // Higher value = slower stopping over time
-  MOBILE_TILT_STRENGTH: 0.005, // Strength of tilt movement
-  TILT_DECAY: 0.98, // How gradually tilt movement slows
+  MOVEMENT_SPEED: 0.008,
+  MOUSE_INFLUENCE: 0.008,
+  RETURN_SPEED: 0.002,
+  MOVEMENT_DECAY: 0.95,
+  MOBILE_DRIFT_SPEED: 0.05, // How fast particles drift on mobile
+  DRIFT_DECAY: 0.98, // Gradual slow down for drifting
 }
 
 export default function StarryBackground() {
-  const [isMobile, setIsMobile] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const mouseRef = useRef<MouseState>({
+    x: 0,
+    y: 0,
+    lastX: 0,
+    lastY: 0,
     moveX: 0,
     moveY: 0,
     lastMoved: 0,
   })
   const particlesRef = useRef<Particle[]>([])
+  const isMobile = useRef(isMobileDevice())
 
   useEffect(() => {
-    setIsMobile(window.innerWidth < 768) // Detect mobile devices
-
     const canvas = canvasRef.current
     if (!canvas) return
 
@@ -71,8 +82,8 @@ export default function StarryBackground() {
           size: Math.random() * (PARTICLE_CONFIG.MAX_SIZE - PARTICLE_CONFIG.MIN_SIZE) + PARTICLE_CONFIG.MIN_SIZE,
           baseX: x,
           baseY: y,
-          velocityX: 0,
-          velocityY: 0,
+          velocityX: isMobile.current ? (Math.random() - 0.5) * PARTICLE_CONFIG.MOBILE_DRIFT_SPEED : 0,
+          velocityY: isMobile.current ? (Math.random() - 0.5) * PARTICLE_CONFIG.MOBILE_DRIFT_SPEED : 0,
           depth: Math.random() * 3 + 1,
         })
       }
@@ -84,33 +95,33 @@ export default function StarryBackground() {
 
       const now = Date.now()
       const timeSinceLastMove = now - mouseRef.current.lastMoved
-      const influenceStrength = isMobile
-        ? PARTICLE_CONFIG.MOBILE_TILT_STRENGTH // Use tilt on mobile
-        : Math.max(0, 1 - timeSinceLastMove / 2000) * PARTICLE_CONFIG.MOUSE_INFLUENCE
+      const influenceStrength = isMobile.current ? 0 : Math.max(0, 1 - timeSinceLastMove / 2000) * PARTICLE_CONFIG.MOUSE_INFLUENCE
 
       particlesRef.current.forEach((particle) => {
         const depthFactor = particle.depth / 4
 
-        // Apply tilt influence on mobile
-        if (isMobile) {
+        if (!isMobile.current && influenceStrength > 0) {
           particle.velocityX += mouseRef.current.moveX * influenceStrength * depthFactor
           particle.velocityY += mouseRef.current.moveY * influenceStrength * depthFactor
         }
 
-        // Particles continue moving in last tilt direction, gradually slowing down
-        particle.velocityX *= PARTICLE_CONFIG.TILT_DECAY
-        particle.velocityY *= PARTICLE_CONFIG.TILT_DECAY
+        // Make particles slowly drift on mobile
+        if (isMobile.current) {
+          particle.x += particle.velocityX * depthFactor
+          particle.y += particle.velocityY * depthFactor
+          particle.velocityX *= PARTICLE_CONFIG.DRIFT_DECAY
+          particle.velocityY *= PARTICLE_CONFIG.DRIFT_DECAY
+        }
 
-        // Apply movement
         particle.x += particle.velocityX
         particle.y += particle.velocityY
+        particle.velocityX *= PARTICLE_CONFIG.MOVEMENT_DECAY
+        particle.velocityY *= PARTICLE_CONFIG.MOVEMENT_DECAY
 
-        // Gradual return to original position
-        const returnSpeed = PARTICLE_CONFIG.RETURN_SPEED * depthFactor
+        const returnSpeed = PARTICLE_CONFIG.RETURN_SPEED * (particle.depth / 4)
         particle.x += (particle.baseX - particle.x) * returnSpeed
         particle.y += (particle.baseY - particle.y) * returnSpeed
 
-        // Calculate opacity based on depth
         const opacity =
           PARTICLE_CONFIG.MIN_OPACITY +
           (particle.depth - 1) * ((PARTICLE_CONFIG.MAX_OPACITY - PARTICLE_CONFIG.MIN_OPACITY) / 3)
@@ -125,29 +136,20 @@ export default function StarryBackground() {
       requestAnimationFrame(animate)
     }
 
-    // Desktop Mouse Movement (Disabled on Mobile)
     const handleMouseMove = (event: MouseEvent) => {
-      if (isMobile) return // Ignore mouse on mobile
+      if (isMobile.current) return // Ignore mouse movement on mobile
 
       const now = Date.now()
       const timeSinceLastMove = now - mouseRef.current.lastMoved
 
       if (timeSinceLastMove > 50) {
-        mouseRef.current.moveX = (event.x - canvas.width / 2) * PARTICLE_CONFIG.MOVEMENT_SPEED
-        mouseRef.current.moveY = (event.y - canvas.height / 2) * PARTICLE_CONFIG.MOVEMENT_SPEED
+        mouseRef.current.moveX = (event.x - mouseRef.current.x) * PARTICLE_CONFIG.MOVEMENT_SPEED
+        mouseRef.current.moveY = (event.y - mouseRef.current.y) * PARTICLE_CONFIG.MOVEMENT_SPEED
+        mouseRef.current.lastX = mouseRef.current.x
+        mouseRef.current.lastY = mouseRef.current.y
+        mouseRef.current.x = event.x
+        mouseRef.current.y = event.y
         mouseRef.current.lastMoved = now
-      }
-    }
-
-    // Handle Mobile Tilt Input
-    const handleDeviceTilt = (event: DeviceOrientationEvent) => {
-      if (!isMobile) return
-
-      const { gamma, beta } = event // gamma: left-right tilt, beta: forward-back tilt
-      if (gamma && beta) {
-        mouseRef.current.moveX = gamma * PARTICLE_CONFIG.MOBILE_TILT_STRENGTH
-        mouseRef.current.moveY = beta * PARTICLE_CONFIG.MOBILE_TILT_STRENGTH
-        mouseRef.current.lastMoved = Date.now()
       }
     }
 
@@ -161,14 +163,12 @@ export default function StarryBackground() {
 
     window.addEventListener("mousemove", handleMouseMove)
     window.addEventListener("resize", handleResize)
-    window.addEventListener("deviceorientation", handleDeviceTilt)
 
     return () => {
       window.removeEventListener("mousemove", handleMouseMove)
       window.removeEventListener("resize", handleResize)
-      window.removeEventListener("deviceorientation", handleDeviceTilt)
     }
-  }, [isMobile])
+  }, [])
 
   return <canvas ref={canvasRef} className="fixed inset-0" />
 }
