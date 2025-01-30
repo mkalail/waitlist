@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useRef } from "react"
+import React, { useEffect, useRef, useState } from "react"
 
 interface Particle {
   x: number
@@ -14,43 +14,31 @@ interface Particle {
 }
 
 interface MouseState {
-  x: number
-  y: number
-  lastX: number
-  lastY: number
   moveX: number
   moveY: number
   lastMoved: number
 }
 
-// Particle configuration - Easily adjust these values
+// Particle configuration (Same for both desktop and mobile)
 const PARTICLE_CONFIG = {
-  // Number of particles
   COUNT: 200,
-
-  // Size range of particles
-  MIN_SIZE: 0.3, // Minimum particle size
-  MAX_SIZE: 1.2, // Maximum particle size
-
-  // Color and opacity
-  COLOR: "255, 248, 184", // RGB values
-  MIN_OPACITY: 0.4, // Minimum opacity
-  MAX_OPACITY: 0.7, // Maximum opacity
-
-  // Movement settings
-  MOVEMENT_SPEED: 0.008, // Increased from 0.005 - Controls base movement speed
-  MOUSE_INFLUENCE: 0.008, // Increased from 0.005 - Controls mouse influence strength
-  RETURN_SPEED: 0.002, // Reduced from 0.003 - Controls return to base speed (lower = more floating)
-  MOVEMENT_DECAY: 0.95, // Increased from 0.92 - Higher value = movement persists longer
+  MIN_SIZE: 0.3,
+  MAX_SIZE: 1.2,
+  COLOR: "255, 248, 184",
+  MIN_OPACITY: 0.4,
+  MAX_OPACITY: 0.7,
+  MOVEMENT_SPEED: 0.008, // Speed multiplier
+  MOUSE_INFLUENCE: 0.008, // Only applied on desktop
+  RETURN_SPEED: 0.002, // Slow return to original position
+  MOVEMENT_DECAY: 0.98, // Higher value = slower stopping over time
+  MOBILE_TILT_STRENGTH: 0.005, // Strength of tilt movement
+  TILT_DECAY: 0.98, // How gradually tilt movement slows
 }
 
 export default function StarryBackground() {
+  const [isMobile, setIsMobile] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const mouseRef = useRef<MouseState>({
-    x: 0,
-    y: 0,
-    lastX: 0,
-    lastY: 0,
     moveX: 0,
     moveY: 0,
     lastMoved: 0,
@@ -58,6 +46,8 @@ export default function StarryBackground() {
   const particlesRef = useRef<Particle[]>([])
 
   useEffect(() => {
+    setIsMobile(window.innerWidth < 768) // Detect mobile devices
+
     const canvas = canvasRef.current
     if (!canvas) return
 
@@ -94,24 +84,33 @@ export default function StarryBackground() {
 
       const now = Date.now()
       const timeSinceLastMove = now - mouseRef.current.lastMoved
-      const influenceStrength = Math.max(0, 1 - timeSinceLastMove / 2000) * PARTICLE_CONFIG.MOUSE_INFLUENCE
+      const influenceStrength = isMobile
+        ? PARTICLE_CONFIG.MOBILE_TILT_STRENGTH // Use tilt on mobile
+        : Math.max(0, 1 - timeSinceLastMove / 2000) * PARTICLE_CONFIG.MOUSE_INFLUENCE
 
       particlesRef.current.forEach((particle) => {
-        if (influenceStrength > 0) {
-          const depthFactor = particle.depth / 4
+        const depthFactor = particle.depth / 4
+
+        // Apply tilt influence on mobile
+        if (isMobile) {
           particle.velocityX += mouseRef.current.moveX * influenceStrength * depthFactor
           particle.velocityY += mouseRef.current.moveY * influenceStrength * depthFactor
         }
 
+        // Particles continue moving in last tilt direction, gradually slowing down
+        particle.velocityX *= PARTICLE_CONFIG.TILT_DECAY
+        particle.velocityY *= PARTICLE_CONFIG.TILT_DECAY
+
+        // Apply movement
         particle.x += particle.velocityX
         particle.y += particle.velocityY
-        particle.velocityX *= PARTICLE_CONFIG.MOVEMENT_DECAY
-        particle.velocityY *= PARTICLE_CONFIG.MOVEMENT_DECAY
 
-        const returnSpeed = PARTICLE_CONFIG.RETURN_SPEED * (particle.depth / 4)
+        // Gradual return to original position
+        const returnSpeed = PARTICLE_CONFIG.RETURN_SPEED * depthFactor
         particle.x += (particle.baseX - particle.x) * returnSpeed
         particle.y += (particle.baseY - particle.y) * returnSpeed
 
+        // Calculate opacity based on depth
         const opacity =
           PARTICLE_CONFIG.MIN_OPACITY +
           (particle.depth - 1) * ((PARTICLE_CONFIG.MAX_OPACITY - PARTICLE_CONFIG.MIN_OPACITY) / 3)
@@ -126,18 +125,29 @@ export default function StarryBackground() {
       requestAnimationFrame(animate)
     }
 
+    // Desktop Mouse Movement (Disabled on Mobile)
     const handleMouseMove = (event: MouseEvent) => {
+      if (isMobile) return // Ignore mouse on mobile
+
       const now = Date.now()
       const timeSinceLastMove = now - mouseRef.current.lastMoved
 
       if (timeSinceLastMove > 50) {
-        mouseRef.current.moveX = (event.x - mouseRef.current.x) * PARTICLE_CONFIG.MOVEMENT_SPEED
-        mouseRef.current.moveY = (event.y - mouseRef.current.y) * PARTICLE_CONFIG.MOVEMENT_SPEED
-        mouseRef.current.lastX = mouseRef.current.x
-        mouseRef.current.lastY = mouseRef.current.y
-        mouseRef.current.x = event.x
-        mouseRef.current.y = event.y
+        mouseRef.current.moveX = (event.x - canvas.width / 2) * PARTICLE_CONFIG.MOVEMENT_SPEED
+        mouseRef.current.moveY = (event.y - canvas.height / 2) * PARTICLE_CONFIG.MOVEMENT_SPEED
         mouseRef.current.lastMoved = now
+      }
+    }
+
+    // Handle Mobile Tilt Input
+    const handleDeviceTilt = (event: DeviceOrientationEvent) => {
+      if (!isMobile) return
+
+      const { gamma, beta } = event // gamma: left-right tilt, beta: forward-back tilt
+      if (gamma && beta) {
+        mouseRef.current.moveX = gamma * PARTICLE_CONFIG.MOBILE_TILT_STRENGTH
+        mouseRef.current.moveY = beta * PARTICLE_CONFIG.MOBILE_TILT_STRENGTH
+        mouseRef.current.lastMoved = Date.now()
       }
     }
 
@@ -151,13 +161,14 @@ export default function StarryBackground() {
 
     window.addEventListener("mousemove", handleMouseMove)
     window.addEventListener("resize", handleResize)
+    window.addEventListener("deviceorientation", handleDeviceTilt)
 
     return () => {
       window.removeEventListener("mousemove", handleMouseMove)
       window.removeEventListener("resize", handleResize)
+      window.removeEventListener("deviceorientation", handleDeviceTilt)
     }
-  }, [])
+  }, [isMobile])
 
   return <canvas ref={canvasRef} className="fixed inset-0" />
 }
-
