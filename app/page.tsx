@@ -2,6 +2,7 @@ import StarryBackground from "./components/StarryBackground"
 import WaitlistForm from "./components/WaitlistForm"
 import Logo from "./components/Logo"
 import { Inter } from "next/font/google"
+import PongGame from "./components/PongGame"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -36,12 +37,16 @@ export default function Home() {
           </h1>
 
           <p className="max-w-[30rem] text-center text-base text-neutral-300 sm:text-lg">
-            To Jacques: Yo Shlobro! Here's your lil placeholder website, ya lil eager beaver 🖕🏼
+            To Jacques: Yo Shlobro! Here's a lil placeholder website, ya lil eager beaver 🖕🏼 
           </p>
 
           <div className="w-full max-w-[24rem] mb-20">
             <WaitlistForm />
           </div>
+              {/* Pong Game Container
+              <div className="w-full flex justify-center mt-10">
+            <PongGame title = "A little something to keep you busy while you wait (doesn't work on mobile)" />
+          </div> */}
         </div>
       </div>
     </main>
