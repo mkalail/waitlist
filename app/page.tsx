@@ -35,7 +35,7 @@ export default function Home() {
           <h1 className="max-w-[40rem] text-center text-[2rem] sm:text-[2.5rem] md:text-[3rem] font-light leading-tight">
             JmK
           </h1>
-          A better way to hire. Get early access now.
+          A better way to hire.
           {/* <p className="max-w-[30rem] text-center text-base text-neutral-300 sm:text-lg">
             The last interview you'll ever need to do.
           </p> */}
